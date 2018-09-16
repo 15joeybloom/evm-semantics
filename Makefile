@@ -25,7 +25,7 @@ KORE_SUBMODULE_SRC:=$(KORE_SUBMODULE)/src/main/haskell/kore
 		build build-ocaml build-java build-node build-kore defn split-tests \
 		test test-all test-concrete test-all-concrete test-conformance test-slow-conformance test-all-conformance \
 		test-vm test-slow-vm test-all-vm test-bchain test-slow-bchain test-all-bchain \
-		test-proof test-interactive \
+		test-proof test-interactive test-haskell test-haskell-slow test-haskell-all \
 		metropolis-theme 2017-devcon3 sphinx
 .SECONDARY:
 
@@ -316,6 +316,17 @@ $(proof_dir)/%.test: $(proof_dir)/% build-java split-proof-tests
 
 split-proof-tests: tests/proofs/make.timestamp
 	$(MAKE) -C tests/proofs $@
+
+# Haskell Tests
+
+TEST_HASKELL=./kevm test-profile-haskell
+
+test-haskell-all: $(all_vm_tests:=.haskelltest)
+test-haskell-slow: $(slow_vm_tests:=.haskelltest)
+test-haskell: $(quick_vm_tests:=.haskelltest)
+
+tests/ethereum-tests/VMTests/%.haskelltest: tests/ethereum-tests/VMTests/% build-haskell
+	MODE=VMTESTS SCHEDULE=DEFAULT $(TEST_HASKELL) $<
 
 # Media
 # -----

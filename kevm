@@ -99,30 +99,36 @@ run_interpreter() {
 }
 
 run_test() {
-    local test_file="$1"     ; shift
-    case "$test_file" in
-        *proofs/*     ) run_proof "$test_file" "$@"
-                        ;;
-        *interactive/*) local expected_file="$1" ; shift
-                        local output_file="$(mktemp "$test_file.out.XXXXXX")"
-                        trap "rm -rf $output_file" INT TERM EXIT
-                        run_krun ocaml "$test_file" --interpret "$@" > "$output_file" \
-                            || pretty_diff "$expected_file" "$output_file"
-                        ;;
-        *             ) run_interpreter "$test_file"
-                        ;;
-    esac
+    local haskell_backend="$1" ; shift
+    local test_file="$1"       ; shift
+    if [[ "$haskell_backend" == true ]]; then
+        run_krun haskell "$test_file"
+    else
+        case "$test_file" in
+            *proofs/*     ) run_proof "$test_file" "$@"
+                            ;;
+            *interactive/*) local expected_file="$1" ; shift
+                            local output_file="$(mktemp "$test_file.out.XXXXXX")"
+                            trap "rm -rf $output_file" INT TERM EXIT
+                            run_krun ocaml "$test_file" --interpret "$@" > "$output_file" \
+                                || pretty_diff "$expected_file" "$output_file"
+                            ;;
+            *             ) run_interpreter "$test_file"
+                            ;;
+        esac
+    fi
 }
 
 run_test_profile() {
-    local test_file="$1"     ; shift
+    local haskell_backend="$1" ; shift
+    local test_file="$1"       ; shift
     local start_time="$(date '+%s')"
     local exit_status='0'
     local output_log_dir="$test_logs/$(dirname -- "$test_file")"
     local stdout_log="$test_logs/$test_file.out"
     local stderr_log="$test_logs/$test_file.err"
     [[ -d "$output_log_dir" ]] || mkdir -p "$output_log_dir"
-    run_test "$test_file" "$@" 1> "$stdout_log" 2> "$stderr_log" || exit_status="$?"
+    run_test "$haskell_backend" "$test_file" "$@" 1> "$stdout_log" 2> "$stderr_log" || exit_status="$?"
     local end_time="$(date '+%s')"
     if [[ "$exit_status" == '0' ]]; then
         echo "$test_file" >> "$now_passing"
@@ -170,12 +176,13 @@ case "$run_command" in
     prove)  run_proof          "$@"             ;;
 
     # Testing
-    haskell)      run_krun haskell "$@" ;;
-    interpret)    run_interpreter  "$@" ;;
-    test)         run_test         "$@" ;;
-    test-profile) run_test_profile "$@" ;;
-    sort-logs)    run_sort_logs         ;;
-    get-failing)  run_get_failing  "$@" ;;
+    haskell)              run_krun haskell       "$@" ;;
+    interpret)            run_interpreter        "$@" ;;
+    test)                 run_test         false "$@" ;;
+    test-profile)         run_test_profile false "$@" ;;
+    test-profile-haskell) run_test_profile true  "$@" ;;
+    sort-logs)            run_sort_logs               ;;
+    get-failing)          run_get_failing        "$@" ;;
 
     *) echo "
     normal usage
@@ -208,17 +215,18 @@ case "$run_command" in
 
     These commands are more for devs and CI servers.
 
-        $0 [haskell|interpret] <pgm>
+        $0 [haskell|test-profile-haskell|interpret] <pgm>
         $0 [test|test-profile] <pgm> <output>
         $0 sort-logs
         $0 get-failing [<count>]
 
-    -   haskell        Run a single EVM program (in JSON testing format) using Haskell backend
-    -   interpret      Run a single EVM program (in JSON testing format) using fast interpreter
-    -   test           Run a single EVM program like it's a test
-    -   test-profile   Same as test, but generate list of failing tests and dump timing information
-    -   sort-logs      Normalize the test logs for CI servers to use
-    -   get-failing    Return a list of failing tests, at most <count>.
+    -   haskell               Run a single EVM program (in JSON testing format) using Haskell backend
+    -   interpret             Run a single EVM program (in JSON testing format) using fast interpreter
+    -   test                  Run a single EVM program like it's a test
+    -   test-profile          Same as test, but generate list of failing tests and dump timing information
+    -   test-profile-haskell  Same as test-profile, but use Haskell backend
+    -   sort-logs             Normalize the test logs for CI servers to use
+    -   get-failing           Return a list of failing tests, at most <count>.
 
     Note: <output> is the expected output of the given test.
 " ; exit ;;
